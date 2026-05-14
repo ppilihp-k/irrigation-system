@@ -249,21 +249,18 @@ class Core(CommandReceiver):
                 print("Dispatch: Unable to publish Actor States.")
 
             output: bytearray = bytearray(QUEUE_ITEM_SIZE)
-            if not self.__input_queue.dequeue(output):
-                self.__current_handler.handle_tick()
-                return
-
-            if ACTOR == int(output[0]):
-                values: tuple[str, str] = self.decode_actor_command(bytes(output))
-                self._handle_actor_command(values[0], values[1])
-            elif CLOCK == int(output[0]):
-                self._handle_clock()
-            elif CORE == int(output[0]):
-                self._handle_command(
-                    self.decode_command(bytes(output)),
-                )
-            else:
-                self.__logger.log("Unknown Message!")
+            while self.__input_queue.dequeue(output):
+                if ACTOR == int(output[0]):
+                    values: tuple[str, str] = self.decode_actor_command(bytes(output))
+                    self._handle_actor_command(values[0], values[1])
+                elif CLOCK == int(output[0]):
+                    self._handle_clock()
+                elif CORE == int(output[0]):
+                    self._handle_command(
+                        self.decode_command(bytes(output)),
+                    )
+                else:
+                    self.__logger.log("Unknown Message!")
             self.__current_handler.handle_tick()
         except Exception as e:  # pylint: disable=broad-exception-caught
             print(f"Core.dispatch: {e}")
