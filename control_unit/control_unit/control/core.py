@@ -1,19 +1,37 @@
 # ---------------------------------------------------------------------------------------------------------------------
-from json import loads, dumps
-from control_unit.control.interfaces.actor import Actor
-from control_unit.control.interfaces.communication import Communicator, State, CommunicatorPublishException, CommandReceiver
+from json import dumps, loads
+
+from control_unit.config.core import (
+    MESSAGE_MAX_SIZE,
+    NAME_MAX_SIZE,
+    QUEUE_CAPACITY,
+    QUEUE_ITEM_SIZE,
+    TOKEN_SIZE,
+)
 from control_unit.control.handler.interfaces import ModeHandler
 from control_unit.control.handler.manual import Handler as ManualHandler
+from control_unit.control.interfaces.actor import Actor
+from control_unit.control.interfaces.communication import (
+    CommandReceiver,
+    Communicator,
+    CommunicatorPublishException,
+    State,
+)
+from control_unit.control.interfaces.logger import Logger
 from control_unit.control.logger.com_logger import ComLogger
-
 from control_unit.queue.queue import Queue
-from control_unit.config.core import QUEUE_CAPACITY, QUEUE_ITEM_SIZE, TOKEN_SIZE, NAME_MAX_SIZE, MESSAGE_MAX_SIZE
+
 try:
-    from time import ticks_ms
+    from time import (  # type: ignore[attr-defined] # Defined for micropython on pico
+        ticks_ms,
+    )
 except ImportError:
     from time import time_ns
-    def ticks_ms():
-        return time_ns() / 1000
+
+    def ticks_ms() -> int:
+        return time_ns() // 1000
+
+
 # ---------------------------------------------------------------------------------------------------------------------
 
 CORE = 0
@@ -22,18 +40,46 @@ CLOCK = 2
 
 # ---------------------------------------------------------------------------------------------------------------------
 
+
+class VoidLogger(Logger):  # pylint: disable=too-few-public-methods # Dummyclass for default initialization.
+    def log(self, msg: str) -> None:
+        pass
+
+    pass
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+
+
+class VoidCommunicator(Communicator):
+    def add_actor(self, name: str) -> None:
+        pass
+
+    def transmit_actor_state(self, state: State) -> None:
+        pass
+
+    def transmit_generic_message(self, msg: str) -> None:
+        pass
+
+    pass
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+
+
 class Core(CommandReceiver):
     """Public Functions have to be Interruptsave."""
 
     def __init__(
         self,
-    ):
-        self.__com: Communicator = None
-        self.__logger: ComLogger = None
+    ) -> None:
+        self.__com: Communicator = VoidCommunicator()
+        self.__logger: Logger = VoidLogger()
         # create a Handler...
-        self.__actors: list = []
+        self.__actors: list[Actor] = []
         self.__manual_handler = ManualHandler(
-            self.__actors, self.__logger,
+            self.__actors,
+            self.__logger,
         )
         self.__current_handler: ModeHandler = self.__manual_handler
         self.__input_queue: Queue = Queue(capacity=QUEUE_CAPACITY, max_item_size=QUEUE_ITEM_SIZE)
@@ -41,9 +87,7 @@ class Core(CommandReceiver):
         pass
 
     def actuator(self) -> list[str]:
-        return [
-            a.name() for a in self.__actors
-        ]
+        return [a.name() for a in self.__actors]
 
     def set_communicator(self, com: Communicator) -> None:
         """Set Communicator.
@@ -71,7 +115,7 @@ class Core(CommandReceiver):
         self.__com.add_actor(
             dumps(
                 {
-                    'actuators': self.actuator(),
+                    "actuators": self.actuator(),
                 }
             )
         )
@@ -94,39 +138,38 @@ class Core(CommandReceiver):
                 This Function will then create a Message within the given Buffer.
                 After the Function returns the Caller can deallocate the Buffer.
         """
-        print(f'Core received Command: {msg}')
-        buffer[0: len(buffer)] = b'\0' * len(buffer)
-        buffer[0: 1] = CORE.to_bytes(1)                               # 0             -- 1                            = Type
-        buffer[1: 1 + len(msg)] = msg
+        buffer[0 : len(buffer)] = b"\0" * len(buffer)
+        buffer[0:1] = CORE.to_bytes(1)  # 0             -- 1                            = Type
+        buffer[1 : 1 + len(msg)] = msg
         self.__input_queue.enqueue(bytes(buffer))
         pass
 
     def actor_command(self, name: bytes, msg: bytes, buffer: bytearray) -> None:
-        buffer[0: len(buffer)] = b'\0' * len(buffer)
-        buffer[0: 1] = ACTOR.to_bytes(1)                               # 0             -- 1                            = Type
-        buffer[1: 1 + NAME_MAX_SIZE] = name[0: NAME_MAX_SIZE]                         # 1             -- 1 + NAME_SIZE                = Name 
-        buffer[1 + NAME_MAX_SIZE: 1 + NAME_MAX_SIZE + MESSAGE_MAX_SIZE] = msg    # 1 + NAME_SIZE -- 1 + NAME_SIZE + MESSAGE_SIZE = Message
+        buffer[0 : len(buffer)] = b"\0" * len(buffer)
+        buffer[0:1] = ACTOR.to_bytes(1)  # 0             -- 1                            = Type
+        buffer[1 : 1 + NAME_MAX_SIZE] = name[0:NAME_MAX_SIZE]  # 1             -- 1 + NAME_SIZE                = Name
+        buffer[
+            1 + NAME_MAX_SIZE : 1 + NAME_MAX_SIZE + MESSAGE_MAX_SIZE
+        ] = msg  # 1 + NAME_SIZE -- 1 + NAME_SIZE + MESSAGE_SIZE = Message
         self.__input_queue.enqueue(bytes(buffer))
         pass
 
     def clock_alarm(self, buffer: bytearray) -> None:
-        buffer[0: len(buffer)] = b'\0' * len(buffer)
-        buffer[0: 1] = CLOCK.to_bytes(1)
+        buffer[0 : len(buffer)] = b"\0" * len(buffer)
+        buffer[0:1] = CLOCK.to_bytes(1)
         self.__input_queue.enqueue(bytes(buffer))
         pass
 
     def decode_actor_command(self, msg: bytes) -> tuple[str, str]:
         return (
-            msg[
-                TOKEN_SIZE: TOKEN_SIZE + NAME_MAX_SIZE                                                   # 0 -- 8
-            ].decode().rstrip('\0'),
-            msg[
-                TOKEN_SIZE + NAME_MAX_SIZE: TOKEN_SIZE + NAME_MAX_SIZE + MESSAGE_MAX_SIZE  # 8 -- 64
-            ].decode().rstrip('\0'),
+            msg[TOKEN_SIZE : TOKEN_SIZE + NAME_MAX_SIZE].decode().rstrip("\0"),  # 0 -- 8
+            msg[TOKEN_SIZE + NAME_MAX_SIZE : TOKEN_SIZE + NAME_MAX_SIZE + MESSAGE_MAX_SIZE]  # 8 -- 64
+            .decode()
+            .rstrip("\0"),
         )
 
     def decode_command(self, msg: bytes) -> str:
-        return msg[1: len(msg)].decode().rstrip('\0')
+        return msg[1 : len(msg)].decode().rstrip("\0")
 
     def _handle_actor_command(self, actor: str, data: str) -> None:
         state: bool = False
@@ -138,7 +181,7 @@ class Core(CommandReceiver):
                 actor,
                 state,
             )
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught # Just reset the Actor State..
             print(e)
             self.__current_handler.handle_actuator_state_change_request(
                 actor,
@@ -149,7 +192,7 @@ class Core(CommandReceiver):
     def _handle_clock(self) -> None:
         pass
 
-    CORE_COMMAND_SET_ACTOR_STATE: str = 'set_actor_state'
+    CORE_COMMAND_SET_ACTOR_STATE: str = "set_actor_state"
 
     def _handle_command(self, msg: str) -> None:
         """
@@ -161,13 +204,11 @@ class Core(CommandReceiver):
         """
         try:
             command = loads(msg)
-            print(
-                f'Process Command {msg}'
-            )
-            command_name: str = command['command']
+            print(f"Process Command {msg}")
+            command_name: str = command["command"]
             if self.CORE_COMMAND_SET_ACTOR_STATE == command_name:
-                state = int(command['data']['state'])
-                actor_name = str(command['data']['actor'])
+                state = int(command["data"]["state"])
+                actor_name = str(command["data"]["actor"])
                 self.__current_handler.handle_actuator_state_change_request(
                     actor_name,
                     bool(state),
@@ -179,11 +220,11 @@ class Core(CommandReceiver):
                     )
                 )
         except CommunicatorPublishException:
-            print('Unable to Publisch Message!')
+            print("Unable to Publisch Message!")
         except KeyError:
-            self.__logger.log('Wrong Schema!')
+            self.__logger.log("Wrong Schema!")
         except ValueError:
-            self.__logger.log(f'JSONDecodeError: {msg}')
+            self.__logger.log(f"JSONDecodeError: {msg}")
             pass
         pass
 
@@ -198,14 +239,14 @@ class Core(CommandReceiver):
                     self.__com.add_actor(
                         dumps(
                             {
-                                'actuators': self.actuator(),
+                                "actuators": self.actuator(),
                             }
                         )
                     )
                     for a in self.__actors:
                         self.__com.transmit_actor_state(State(instance=a.name(), active=a.state()))
             except CommunicatorPublishException:
-                print('Dispatch: Unable to publish Actor States.')
+                print("Dispatch: Unable to publish Actor States.")
 
             output: bytearray = bytearray(QUEUE_ITEM_SIZE)
             if not self.__input_queue.dequeue(output):
@@ -213,23 +254,23 @@ class Core(CommandReceiver):
                 return
 
             if ACTOR == int(output[0]):
-                values: tuple[str, str] = self.decode_actor_command(output)
+                values: tuple[str, str] = self.decode_actor_command(bytes(output))
                 self._handle_actor_command(values[0], values[1])
             elif CLOCK == int(output[0]):
                 self._handle_clock()
             elif CORE == int(output[0]):
                 self._handle_command(
-                    self.decode_command(output),
+                    self.decode_command(bytes(output)),
                 )
             else:
-                self.__logger.log('Unknown Message!')
+                self.__logger.log("Unknown Message!")
             self.__current_handler.handle_tick()
-        except Exception as e:
-            print(f'Core.dispatch: {e}')
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            print(f"Core.dispatch: {e}")
 
         pass
 
     pass
 
-# ---------------------------------------------------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------------------------------------------------

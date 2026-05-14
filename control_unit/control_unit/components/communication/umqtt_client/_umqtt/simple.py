@@ -1,4 +1,4 @@
-
+# type: ignore
 import socket
 import struct
 from binascii import hexlify

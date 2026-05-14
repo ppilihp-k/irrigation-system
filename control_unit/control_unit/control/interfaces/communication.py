@@ -1,42 +1,46 @@
-
 # ---------------------------------------------------------------------------------------------------------------------
 class CommunicatorException(Exception):
     pass
 
+
 class CommunicatiorConnectionFailed(CommunicatorException):
     pass
 
+
 class CommunicatorPublishException(CommunicatorException):
     pass
+
 
 class CommunicatorReadMessageException(CommunicatorException):
     pass
 
 
 # ---------------------------------------------------------------------------------------------------------------------
-class CommandReceiver:
-
-    def command(self, msg: bytes, buffer: bytearray):
-        print(msg)
+class CommandReceiver:  # pylint: disable=too-few-public-methods # Simulate abstract Class...
+    def command(
+        self, msg: bytes, buffer: bytearray
+    ) -> None:  # pylint: disable=unused-argument # Simulate abstract Class...
         pass
 
     pass
 
+
 # ---------------------------------------------------------------------------------------------------------------------
 
-class State:
 
-    def __init__(self, instance: str, active: bool):
+class State:  # pylint: disable=too-few-public-methods # Simulate Dataclass.
+    def __init__(self, instance: str, active: bool) -> None:
         self.instance: str = instance
         self.active: bool = active
         pass
 
     pass
 
+
 # ---------------------------------------------------------------------------------------------------------------------
 
-class Communicator:
 
+class Communicator:
     def add_actor(self, name: str) -> None:
         pass
 
@@ -47,5 +51,6 @@ class Communicator:
         pass
 
     pass
+
 
 # ---------------------------------------------------------------------------------------------------------------------
