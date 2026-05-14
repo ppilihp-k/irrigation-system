@@ -1,0 +1,15 @@
+[project]
+name = "irigation_system"
+version = "0.0.0"
+authors = [
+  { name="Philipp Kroll", email="author@example.com" },
+]
+description = "Software for a Control Unit for an Irigation System."
+readme = "README.md"
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
