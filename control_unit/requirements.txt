@@ -1,0 +1,7 @@
+-e .
+paho-mqtt
+black
+pylint
+mypy
+pre-commit
+archunitpython
